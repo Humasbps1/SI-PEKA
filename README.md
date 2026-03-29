@@ -1,4 +1,4 @@
-# 📡 Pusat Kendali Kehumasan — BPS Sultra
+# 📡 Pusat Kendali Kehumasan — Badan Pusat Statiktik Provinsi Sultra
 
 Dashboard modern berbasis Streamlit untuk monitoring dan penjadwalan terintegrasi lintas channel kehumasan BPS Provinsi Sulawesi Tenggara.
 
@@ -16,7 +16,7 @@ Dashboard modern berbasis Streamlit untuk monitoring dan penjadwalan terintegras
 4.  Jalankan: `streamlit run app.py`
 
 ## 📡 Deployment
-Didesain untuk Streamlit Cloud. Pastikan data rahasia dimasukkan ke dalam **Secrets Manager** di dashboard deployment.
+Didesain untuk Streamlit Cloud. .
 
 ---
-© 2026 BPS Provinsi Sulawesi Tenggara | Advanced Agentic Coding v3.0
+© 2026 BPS Provinsi Sulawesi Tenggara | Tim humas v1.0
