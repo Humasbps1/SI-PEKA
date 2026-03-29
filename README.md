@@ -16,7 +16,7 @@ Dashboard modern berbasis Streamlit untuk monitoring dan penjadwalan terintegras
 4.  Jalankan: `streamlit run app.py`
 
 ## 📡 Deployment
-Didesain untuk Streamlit Cloud. .
+Didesain untuk Streamlit Cloud. 
 
 ---
 © 2026 BPS Provinsi Sulawesi Tenggara | Tim humas v1.0
