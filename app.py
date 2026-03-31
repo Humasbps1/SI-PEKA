@@ -71,6 +71,30 @@ def get_gspread_session():
 @st.cache_data(ttl=600)
 def load_single_sheet_data(sheet_name):
     """Memuat data dari satu sheet spesifik."""
+    def clean_indo_month_string(date_str):
+        if not isinstance(date_str, str): return date_str
+        indo_to_eng = {
+            'januari': 'January', 'februari': 'February', 'maret': 'March',
+            'april': 'April', 'mei': 'May', 'juni': 'June',
+            'juli': 'July', 'agustus': 'August', 'september': 'September',
+            'oktober': 'October', 'november': 'November', 'desember': 'December'
+        }
+        
+        original_str = str(date_str).strip()
+        if not original_str or original_str.lower() == 'nan': return ""
+        
+        low_str = original_str.lower()
+        for indo, eng in indo_to_eng.items():
+            if indo in low_str:
+                original_str = re.sub(re.escape(indo), eng, original_str, flags=re.IGNORECASE)
+                break
+        
+        # Jika hasil tidak mengandung tahun (4 digit), tambahkan 2026
+        if original_str and not re.search(r'\d{4}', original_str):
+            original_str = f"{original_str} 2026"
+            
+        return original_str
+
     try:
         sh = get_gspread_session()
         if not sh: return pd.DataFrame()
@@ -79,12 +103,21 @@ def load_single_sheet_data(sheet_name):
         data = ws.get_all_values()
         if not data: return pd.DataFrame()
         
-        # Cari baris header otomatis
+        # Cari baris header otomatis (lebih cerdas)
         h_idx = 0
+        header_keywords = ['no', 'bidang', 'nama', 'konten', 'bulan', 'jadwal', 'tanggal', 'tema', 'kegiatan']
+        
         for i, row in enumerate(data):
-            if any(c.strip() != "" for c in row):
+            row_low = [str(c).strip().lower() for c in row if c]
+            if any(any(k in c for k in header_keywords) for c in row_low):
                 h_idx = i
                 break
+        else:
+            # Fallback jika tidak ketemu keyword: baris pertama yang ada isinya
+            for i, row in enumerate(data):
+                if any(c.strip() != "" for c in row):
+                    h_idx = i
+                    break
         
         headers = [h if h.strip() != "" else f"Col_{i}" for i, h in enumerate(data[h_idx])]
         df = pd.DataFrame(data[h_idx + 1:], columns=headers)
@@ -94,17 +127,52 @@ def load_single_sheet_data(sheet_name):
             df[col] = df[col].str.strip()
         
         # Filter Baris Kosong
-        key_cols = ['Bidang yang Bertugas', 'Nama', 'Konten', 'Bulan', 'Jadwal Posting', 
-                    'Tema', 'Kegiatan', 'Agenda', 'Judul', 'Petugas', 'Jadwal', 'Tanggal']
-        available_keys = [c for c in df.columns if c.strip() in key_cols or c.lower().strip() in [k.lower() for k in key_cols]]
+        key_patterns = ['Bidang', 'Nama', 'Konten', 'Bulan', 'Jadwal', 'Tema', 'Kegiatan', 'Agenda', 'Judul', 'Petugas', 'Tanggal', 'Materi', 'Rilis', 'Detail']
+        available_keys = [c for c in df.columns if any(p.lower() in c.lower() for p in key_patterns)]
         
         if available_keys:
             df = df.replace('', pd.NA).dropna(subset=available_keys, how='all').fillna('')
         
-        # Deteksi Tanggal Otomatis
-        date_cols = [c for c in df.columns if any(p in c.lower() for p in ["jadwal", "tanggal", "waktu"])]
+        # Deteksi Tanggal Otomatis (Prioritaskan kolom spesifik)
+        date_patterns = ["jadwal", "tanggal", "waktu", "tayang", "post", "rilis", "bulan"]
+        date_cols = []
+        for p in date_patterns:
+            cols = [c for c in df.columns if p in c.lower()]
+            date_cols.extend(cols)
+        
+        # Fallback: Cari kolom yang isinya terlihat seperti tanggal (dd/mm/yyyy)
+        if not date_cols:
+            for col in df.columns:
+                sample = df[col].astype(str).head(20).tolist()
+                if any(re.search(r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', str(s)) for s in sample):
+                    date_cols.append(col)
+
         if date_cols:
-            df['dt_ref'] = pd.to_datetime(df[date_cols[0]], errors='coerce', dayfirst=True)
+            # Cari kolom terbaik (yang punya data paling banyak)
+            best_col = date_cols[0]
+            max_filled = -1
+            for col in date_cols:
+                filled_count = df[col].astype(str).str.strip().replace(['', 'nan', 'None'], pd.NA).dropna().count()
+                if filled_count > max_filled:
+                    max_filled = filled_count
+                    best_col = col
+            
+            def safe_parse_date(val):
+                cleaned = clean_indo_month_string(val)
+                # Hilangkan simbol-simbol aneh
+                cleaned = re.sub(r'["\'\>\[\]]', '', cleaned).strip()
+                try:
+                    return pd.to_datetime(cleaned, errors='coerce', dayfirst=True)
+                except:
+                    return pd.NaT
+
+            # Coba parse kolom utama
+            df['dt_ref'] = df[best_col].apply(safe_parse_date)
+            
+            # Jika ada NaT tapi ada kolom tanggal kedua, lakukan pengisian (coalesce)
+            if df['dt_ref'].isna().any() and len(date_cols) > 1:
+                col2 = [c for c in date_cols if c != best_col][0]
+                df['dt_ref'] = df['dt_ref'].fillna(df[col2].apply(safe_parse_date))
             
         return df.dropna(how="all")
     except Exception:
@@ -112,22 +180,35 @@ def load_single_sheet_data(sheet_name):
 
 @st.cache_data(ttl=600)
 def load_all_dashboard_data():
-    """Memuat dan menggabungkan semua data dari berbagai channel (Tanpa UI Side-effects)."""
-    sheets = [
-        "📊Promosi Statistik 2026", "✨Hari Penting", "📣Press Release", "🖼️Konten Medsos",
-        "Sosialisasi Publikasi 📢", "🕵🏻‍♂️Keprotokolan", "📸 Peliputan", "📝 Media Massa (non rilis)",
-        "🎙️Sosialisasi Kegiatan", "🤝🏻 Kelembagaan", "📚 Pengembangan Kompetensi"
-    ]
-    
-    all_dfs = []
-    for s in sheets:
-        tdf = load_single_sheet_data(s)
-        if not tdf.empty:
-            tdf['Sumber'] = s
-            all_dfs.append(tdf)
-    
-    if not all_dfs: return pd.DataFrame()
-    return pd.concat(all_dfs, ignore_index=True)
+    """Memuat SEMUA sheet dari workbook secara total untuk menghindari data terlewat."""
+    try:
+        sh = get_gspread_session()
+        if not sh: return pd.DataFrame()
+        
+        # Ambil seluruh daftar nama sheet tanpa kecuali
+        all_worksheets = [ws.title for ws in sh.worksheets()]
+        
+        all_dfs = []
+        loaded_sheets = []
+        
+        for s in all_worksheets:
+            # Skip sheet sistem atau yang jelas kosong (opsional)
+            if s.lower() in ['pilih', 'config', 'referensi', 'hidden']: continue
+            
+            tdf = load_single_sheet_data(s)
+            if not tdf.empty and ('dt_ref' in tdf.columns or len(tdf.columns) > 3):
+                tdf['Sumber'] = s
+                all_dfs.append(tdf)
+                loaded_sheets.append(s)
+        
+        # Simpan daftar sheet yang berhasil dimuat di session state untuk UI
+        st.session_state.loaded_sheets_info = loaded_sheets
+        
+        if not all_dfs: return pd.DataFrame()
+        return pd.concat(all_dfs, ignore_index=True)
+    except Exception as e:
+        st.error(f"Gagal memuat data total: {e}")
+        return pd.DataFrame()
 
 # ===============================
 # RENDER SIDEBAR
@@ -198,10 +279,8 @@ if st.session_state.active_menu == "Dashboard":
     </div>
     """, unsafe_allow_html=True)
     
-    # Render loading status hanya jika cache kosong (efisiensi UI)
-    with st.status("📡 Sinkronisasi Pusat Data...", expanded=False) as status:
-        df_all = load_all_dashboard_data()
-        status.update(label="✅ Data Terkoneksi", state="complete")
+    # Silent Loading (Data Terkoneksi via Cache)
+    df_all = load_all_dashboard_data()
     
     if not df_all.empty:
         # Terapkan filter tambahan: Buang baris yang benar-benar kosong 
@@ -223,7 +302,6 @@ if st.session_state.active_menu == "Dashboard":
             df_this_month = df_all[mask_this_month]
             
             # 3. Selesai (Bulan Ini)
-            # Deteksi kolom status yang lebih luas (Status, Keterangan, Progres, Done)
             status_cols = [c for c in df_dash.columns if any(p in c.lower() for p in ['status', 'keterangan', 'progres', 'done'])]
             done_this_month = 0
             if status_cols:
@@ -336,18 +414,39 @@ if st.session_state.active_menu == "Dashboard":
                         mode='lines+markers',
                         marker=dict(size=10, color='#FFFFFF', line=dict(width=2, color='#f26522'))
                     )
+                    # Filter data valid untuk trendline (Hanya Tahun 2026)
+                    df_trend = df_all.dropna(subset=['dt_ref']).copy()
+                    df_trend = df_trend[df_trend['dt_ref'].dt.year == 2026]
                     
-                    fig_trend.update_layout(
-                        showlegend=False, 
-                        plot_bgcolor='rgba(0,0,0,0)', 
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        height=550 if expanded else 480,
-                        margin=dict(t=40, b=40, l=40, r=40),
-                        xaxis=dict(title="", showgrid=False, color='#888aaa'),
-                        yaxis=dict(title="Jumlah Agenda", showgrid=True, gridcolor='rgba(255,255,255,0.05)', color='#888aaa'),
-                        font=dict(color='#888aaa', family='Inter')
-                    )
-                    st.plotly_chart(fig_trend, use_container_width=True, config={'displayModeBar': False}, theme=None)
+                    # Buat index 12 bulan penuh agar grafik tidak terputus
+                    all_months = pd.date_range(start='2026-01-01', end='2026-12-01', freq='MS')
+                    base_df = pd.DataFrame({'dt_ref_period': all_months.to_period('M')})
+                    
+                    if not df_trend.empty:
+                        df_trend['dt_ref_period'] = df_trend['dt_ref'].dt.to_period('M')
+                        counts = df_trend.groupby('dt_ref_period').size().reset_index(name='Jumlah')
+                        
+                        # Gabungkan dengan base_df agar ada 12 bulan
+                        trend_data = pd.merge(base_df, counts, on='dt_ref_period', how='left').fillna(0)
+                        trend_data['Bulan_Teks'] = trend_data['dt_ref_period'].dt.strftime('%b %Y')
+                        trend_data = trend_data.sort_values('dt_ref_period')
+                        
+                        fig_trend = px.area(trend_data, x='Bulan_Teks', y='Jumlah',
+                                            markers=True, color_discrete_sequence=['#F26522'])
+                        
+                        # --- Perbaikan Visual Chart (Jan - Des Only) ---
+                        fig_trend.update_layout(
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            xaxis=dict(showgrid=False, title='', tickfont=dict(color='#888aaa'), type='category'),
+                            yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.05)', title='Jumlah Agenda', tickfont=dict(color='#888aaa')),
+                            margin=dict(l=0, r=0, t=20, b=0),
+                            height=350,
+                            hovermode='x unified'
+                        )
+                        st.plotly_chart(fig_trend, use_container_width=True, config={'displayModeBar': False})
+                    else:
+                        st.info("Belum ada data di tahun 2026 untuk ditampilkan di tren.")
                 else:
                     st.info("Data waktu tidak tersedia untuk menampilkan tren.")
 
@@ -455,25 +554,66 @@ if st.session_state.active_menu == "Dashboard":
             html_table += '<tbody>'
             
             for _, row in future_df.iterrows():
-                # Helper internal untuk deteksi data lintas kolom
-                def get_tbl_val(patterns, exclude_col=None):
-                    # Prioritaskan pencocokan yang lebih spesifik jika memungkinkan
-                    # Tapi tetap pertahankan urutan kolom dari index
-                    for col in row.index:
-                        if exclude_col and col == exclude_col:
-                            continue
-                        if any(p in col.lower() for p in patterns):
-                            val = row[col]
-                            if pd.notna(val) and str(val).strip().lower() != 'nan' and str(val).strip() != '':
-                                return str(val), col
-                    return "-", None
+                # --- ENHANCED OFFICER DETECTOR (SMARTER) ---
+                def get_all_officers(r_data):
+                    # Kata kunci petugas, tapi hindari kata kunci judul
+                    officer_keys = ["petugas", "bidang", "writer", "designer", "editor", "kameramen", "pic", "operator", "cast", "support"]
+                    # Tambahkan "nama" hanya jika bukan "nama konten/agenda"
+                    found = []
+                    officer_cols = []
+                    for col in r_data.index:
+                        c_low = col.lower()
+                        # Lewati jika terlihat seperti kolom Judul
+                        if any(x in c_low for x in ["konten", "agenda", "tema", "judul", "kegiatan"]): continue
+                        
+                        if any(k in c_low for k in officer_keys) or ( "nama" in c_low and "petugas" in c_low ) or c_low == "nama":
+                            val = str(r_data[col]).strip()
+                            if val and val.lower() not in ['nan', '-', ''] and not val.isdigit():
+                                if val not in found: found.append(val)
+                                officer_cols.append(col)
+                    return ", ".join(found) if found else "-", officer_cols
 
-                agenda_txt, agenda_col = get_tbl_val(["nama konten", "tema", "kegiatan", "agenda", "judul", "konten"])
-                jadwal_txt, _ = get_tbl_val(["jadwal", "tanggal", "tayang"])
-                # Untuk petugas, hindari kolom yang sudah diambil oleh agenda
-                petugas_txt, _ = get_tbl_val(["bidang", "petugas", "nama", "operator", "divisi", "pic", "writer"], exclude_col=agenda_col)
+                petugas_txt, officer_cols = get_all_officers(row)
+
+                # --- REFINED TITLE DETECTOR ---
+                def get_best_title(r_data, k_patterns, skip_cols):
+                    source_str = str(r_data.get('Sumber',''))
+                    
+                    # 1. Keyword Prioritas
+                    for col in r_data.index:
+                        if col in skip_cols: continue
+                        if any(p in col.lower() for p in k_patterns):
+                            v = r_data[col]
+                            if pd.notna(v) and str(v).strip().lower() not in ['nan', '', '-']:
+                                return str(v), col
+                    
+                    # 2. Smart Fallback
+                    candidates = []
+                    exclude = ['dt_ref', 'Sumber', 'no', 'urut', 'unnamed', 'col_', 's'] + skip_cols
+                    for col in r_data.index:
+                        if any(x in col.lower() for x in exclude): continue
+                        val = str(r_data[col]).strip()
+                        if val and val.lower() not in ['nan', '-', ''] and not val.isdigit() and not re.search(r'\d{1,2}[/-]\d{1,2}', val):
+                            candidates.append(val)
+                    
+                    if candidates:
+                        if "Publikasi" in source_str:
+                             # Jika cuma ada 1 candidate (karena yang lain jadi petugas), tetap kasih prefix
+                             main_part = " - ".join(candidates[:2]) if len(candidates) > 1 else candidates[0]
+                             return f"Publikasi Bulan {main_part}", None
+                        return max(candidates, key=len), None
+                    return source_str.split('📢')[0].strip(), None
+
+                # Deteksi Judul
+                title_keys = ["nama konten", "tema", "kegiatan", "agenda", "judul", "hari penting", "materi", "topik"]
+                agenda_txt, agenda_col = get_best_title(row, title_keys, officer_cols)
                 
-                # Gunakan Nama Sheet Asli Sesuai Permintaan User (Misal: 🖼️Konten Medsos)
+                # Deteksi Jadwal
+                if pd.notna(row['dt_ref']):
+                    jadwal_txt = row['dt_ref'].strftime("%d/%m/%Y")
+                else:
+                    jadwal_txt = str(row.get('Jadwal', row.get('Tanggal', '-')))
+                
                 source_tag = str(row['Sumber'])
                 
                 html_table += f"<tr>"
@@ -484,10 +624,8 @@ if st.session_state.active_menu == "Dashboard":
                 html_table += f"</tr>"
             html_table += '</tbody></table></div>'
 
-            
             st.markdown(html_table, unsafe_allow_html=True)
         
-        # Stop rendering rest of code by returning or using a flag
         st.stop()
     else:
         st.warning("Data gabungan belum tersedia.")
@@ -505,10 +643,8 @@ elif st.session_state.active_menu == "Kalender":
     df_all = load_all_dashboard_data()
     
     if not df_all.empty and 'dt_ref' in df_all.columns:
-        # Filter valid dates
         df_cal = df_all.dropna(subset=['dt_ref']).copy()
         
-        # Prepare Events
         events = []
         source_colors = {
             "📊Promosi Statistik 2026": "#36A2EB",
@@ -524,79 +660,76 @@ elif st.session_state.active_menu == "Kalender":
             "📚 Pengembangan Kompetensi": "#9966FF"
         }
         
-        # Reset Index untuk memudahkan mapping ID
-        df_cal_clean = df_cal.reset_index(drop=True)
-        
-        for idx, row in df_cal_clean.iterrows():
-            # Cek kolom judul secara dinamis (Cari yang ada isinya)
-            title_patterns = ["nama konten", "nama kegiatan", "tema", "kegiatan", "agenda", "judul", "konten", "topik"]
-            matching_title_cols = [c for c in row.index if any(p in c.lower() for p in title_patterns)]
-            
-            # Ambil isian pertama yang tidak kosong
-            title = "Agenda"
-            for col in matching_title_cols:
-                val = row[col]
-                if pd.notna(val) and str(val).strip().lower() != 'nan' and str(val).strip() != '':
-                    title = str(val)
+        for idx, (_, row) in enumerate(df_cal.iterrows()):
+            # --- SAME REFINED RADAR FOR CALENDAR ---
+            title_keys = ["nama konten", "tema", "kegiatan", "agenda", "judul", "hari penting", "materi", "topik", "keterangan"]
+            # Re-implementing simplified inline for speed/safety
+            title_val = None
+            for p in title_keys:
+                match = [c for c in row.index if p in c.lower()]
+                if match and str(row[match[0]]).strip().lower() not in ['nan','','-']:
+                    title_val = str(row[match[0]])
                     break
-                    
+            
+            if not title_val:
+                cands = [str(row[c]).strip() for c in row.index if c not in ['dt_ref','Sumber'] and not str(row[c]).isdigit() and len(str(row[c])) > 2]
+                if cands:
+                    if "Publikasi" in str(row.get('Sumber','')): 
+                        title_val = f"Publikasi Bulan {cands[0]} ({cands[1]})" if len(cands) > 1 else cands[0]
+                    else: title_val = max(cands, key=len)
+            
+            if not title_val or title_val.lower() == 'nan': 
+                title_val = str(row.get('Sumber','Agenda')).split('📢')[0].strip()
+            
             sumber = row.get('Sumber', 'Lainnya')
             color = source_colors.get(sumber, "#888aaa")
-            s_tag = sumber.replace('📣','').replace('📊','').replace('🖼️','').strip()[:5]
+            s_tag = sumber.replace('📣','').replace('📊','').replace('🖼️','').replace('✨','').strip()[:5]
             
+            # Formating tanggal (Jadwal)
+            raw_sched = str(row.get('Jadwal Posting', row.get('Jadwal', row.get('Tanggal', ''))))
+            time_str = ""
+            if ":" in raw_sched and any(char.isdigit() for char in raw_sched):
+                import re
+                t_match = re.search(r'(\d{1,2}:\d{2})', raw_sched)
+                if t_match: time_str = f"({t_match.group(1)}) "
+            
+            display_title = f"{time_str}[{s_tag}] {title_val}"
+            sanitized_data = {str(k): str(v) for k, v in row.to_dict().items()}
+
             events.append({
                 "id": str(idx),
-                "title": f"[{s_tag}] {title}",
+                "title": display_title,
                 "start": row['dt_ref'].strftime("%Y-%m-%d") if pd.notna(row['dt_ref']) else "",
                 "backgroundColor": color,
                 "borderColor": color,
-                "allDay": True
+                "allDay": True,
+                "extendedProps": {
+                    "sumber": sumber,
+                    "row_data": sanitized_data
+                }
             })
 
-        # Render Calendar
         calendar_options = {
-            "headerToolbar": {
-                "left": "today prev,next",
-                "center": "title",
-                "right": "dayGridMonth,dayGridWeek,listWeek",
-            },
+            "headerToolbar": {"left": "today prev,next", "center": "title", "right": "dayGridMonth,dayGridWeek,listWeek"},
             "initialView": "dayGridMonth",
-            "editable": False,
-            "selectable": True,
-            "themeSystem": "bootstrap",
+            "initialDate": datetime.now().strftime("%Y-%m-%d"),
             "height": 700,
         }
         
         custom_css = """
-            .fc-header-toolbar { color: #FFFFFF !important; }
-            .fc-daygrid-day-number { color: #888aaa !important; text-decoration: none !important; }
-            .fc-col-header-cell-cushion { color: #FFFFFF !important; font-weight: 700 !important; }
-            .fc-event-title { font-weight: 600 !important; font-size: 0.8rem !important; }
             .fc { background: rgba(30,33,50,0.4); border-radius: 15px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); }
+            .fc-event-title { font-weight: 600 !important; font-size: 0.8rem !important; }
         """
         st.markdown(f"<style>{custom_css}</style>", unsafe_allow_html=True)
         
-        cal_result = calendar(events=events, options=calendar_options, key="hms_calendar")
-        
-        # POPUP DETAIL SYSTEM
         @st.dialog("📋 Detail Agenda Kehumasan")
         def show_agenda_detail(title, row_data):
             sumber = row_data.get('Sumber', '')
-            
-            # --- Tampilan Khusus Medsos ---
             if "Medsos" in sumber:
-                # Helper untuk mengambil data dengan fallback '-' dan pembersihan NaN
                 def get_m(col):
                     v = row_data.get(col)
                     return str(v) if pd.notna(v) and str(v).strip().lower() != 'nan' and str(v).strip() != '' else "-"
-
-                st.markdown(f"""
-                <div style="background: rgba(75, 192, 192, 0.1); border-left: 5px solid #4bc0c0; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h4 style="margin:0; color:#FFFFFF;">{get_m('Nama Konten')}</h4>
-                    <p style="margin:5px 0 0 0; color:#888aaa; font-size:0.9rem;">📍 Konten Media Sosial</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
+                st.markdown(f'<div style="background:rgba(75,192,192,0.1); border-left:5px solid #4bc0c0; padding:15px; border-radius:8px; margin-bottom:20px;"><h4 style="margin:0; color:#FFFFFF;">{get_m("Nama Konten")}</h4><p style="margin:5px 0 0 0; color:#888aaa; font-size:0.9rem;">📍 Konten Media Sosial</p></div>', unsafe_allow_html=True)
                 c1, c2 = st.columns(2)
                 with c1:
                     st.write("**🎭 Jenis:**", get_m('Jenis'))
@@ -604,85 +737,34 @@ elif st.session_state.active_menu == "Kalender":
                     st.write("**✅ Status:**", get_m('Status'))
                 with c2:
                     st.write("**✍️ Writer:**", get_m('Writer'))
-                    st.write("**🎨 Designer/Editor:**", get_m('Designer/Editor'))
+                    st.write("**🎨 Designer:**", get_m('Designer/Editor'))
                     st.write("**⏰ Tayang:**", get_m('Jadwal Tayang'))
-                
-                st.markdown('<div style="margin:10px 0; border-top:1px solid rgba(255,255,255,0.05);"></div>', unsafe_allow_html=True)
-                st.write("**🎬 Tim Produksi:**")
                 sc1, sc2, sc3 = st.columns(3)
                 with sc1: st.write("**📹 Kameramen:**", get_m('Kameramen'))
                 with sc2: st.write("**🎙️ Cast/VO:**", get_m('Cast/VO'))
                 with sc3: st.write("**🔧 Support:**", get_m('Support'))
-                
-                st.write("**🚀 Petugas Posting:**", get_m('Petugas Posting'))
-                
-            # --- Tampilan Khusus Promosi ---
             elif "Promosi" in sumber:
                 def get_p(col):
                     v = row_data.get(col)
                     return str(v) if pd.notna(v) and str(v).strip().lower() != 'nan' and str(v).strip() != '' else "-"
-
-                st.markdown(f"""
-                <div style="background: rgba(54, 162, 235, 0.1); border-left: 5px solid #36a2eb; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h4 style="margin:0; color:#FFFFFF;">{get_p('Nama Konten')}</h4>
-                    <p style="margin:5px 0 0 0; color:#888aaa; font-size:0.9rem;">📍 Promosi Statistik 2026</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
+                st.markdown(f'<div style="background:rgba(54,162,235,0.1); border-left:5px solid #36a2eb; padding:15px; border-radius:8px; margin-bottom:20px;"><h4 style="margin:0; color:#FFFFFF;">{get_p("Nama Konten")}</h4><p style="margin:5px 0 0 0; color:#888aaa; font-size:0.9rem;">📍 Promosi Statistik 2026</p></div>', unsafe_allow_html=True)
                 c1, c2 = st.columns(2)
                 with c1:
                     st.write("**🏢 Bidang:**", get_p('Bidang yang Bertugas'))
-                    st.write("**🎭 Jenis:**", get_p('Jenis Konten'))
                     st.write("**📌 Jadwal:**", get_p('Jadwal Posting'))
                 with c2:
                     st.write("**✅ Status:**", get_p('Status'))
                     st.write("**📈 Progress:**", get_p('Progress'))
-                
-                st.markdown('<div style="margin:10px 0; border-top:1px solid rgba(255,255,255,0.05);"></div>', unsafe_allow_html=True)
-                st.write("**🎬 Tim Produksi & Konsultasi:**")
-                sc1, sc2, sc3 = st.columns(3)
-                with sc1: 
-                    st.write("**✍️ Writer:**", get_p('Content Writer'))
-                    st.write("**📹 Kameramen:**", get_p('Kameramen'))
-                with sc2: 
-                    st.write("**🎨 Designer:**", get_p('Designer/Editor'))
-                    st.write("**🎙️ Cast/VO:**", get_p('Cast/VO'))
-                with sc3: 
-                    st.write("**🤝 Konsultan:**", get_p('Konsultan'))
-                    st.write("**🔧 Support:**", get_p('Support'))
-
-            # --- Tampilan Umum / Generic ---
             else:
-                s_icon = next((icon for id, label, icon in [(m['id'], m['label'], m['icon']) for m in menu_items] if label == sumber or label in sumber), "📅")
-                
-                # Filter out system and generic column names
-                excluded_cols = ['dt_ref', 'Sumber', 'Unnamed: 0', 'No', 'Column 2', 's']
-                available_cols = [c for c in row_data.index if c not in excluded_cols and pd.notna(row_data[c]) and str(row_data[c]).strip().lower() != 'nan' and str(row_data[c]).strip() != '']
-                
-                # Detect Title
-                title_patterns_ext = ["nama konten", "nama kegiatan", "tema", "kegiatan", "agenda", "judul", "konten", "topik"]
-                title_col = next((c for c in available_cols if any(p in c.lower() for p in title_patterns_ext)), available_cols[0] if available_cols else "Detail Agenda")
-                
-                st.markdown(f"""
-                <div style="background: rgba(255, 255, 255, 0.05); border-left: 5px solid #F26522; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                    <h4 style="margin:0; color:#FFFFFF;">{row_data.get(title_col, title_col)}</h4>
-                    <p style="margin:5px 0 0 0; color:#888aaa; font-size:0.9rem;">📍 {sumber}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Render in two columns if many fields
-                if len(available_cols) > 2:
-                    c1, c2 = st.columns(2)
-                    for i, col in enumerate(available_cols):
-                        if col == title_col: continue
-                        with (c1 if i % 2 == 0 else c2):
-                            st.write(f"**{col}:**", str(row_data[col]))
-                else:
-                    for col in available_cols:
-                        if col == title_col: continue
-                        st.write(f"**{col}:**", str(row_data[col]))
+                excluded = ['dt_ref', 'Sumber', 'Unnamed: 0', 'No', 'Column 2', 's']
+                available = [c for c in row_data.index if c not in excluded and pd.notna(row_data[c]) and str(row_data[c]).strip().lower() != 'nan']
+                st.markdown(f'<div style="background:rgba(255,255,255,0.05); border-left:5px solid #F26522; padding:15px; border-radius:8px; margin-bottom:20px;"><h4 style="margin:0; color:#FFFFFF;">{title}</h4><p style="margin:5px 0 0 0; color:#888aaa; font-size:0.9rem;">📍 {sumber}</p></div>', unsafe_allow_html=True)
+                c1, c2 = st.columns(2)
+                for i, col in enumerate(available):
+                    with (c1 if i % 2 == 0 else c2): st.write(f"**{col}:**", str(row_data[col]))
 
-        # Handle Click
+        cal_result = calendar(events=events, options=calendar_options, key="hms_calendar")
+        
         if cal_result and "eventClick" in cal_result:
             try:
                 event_id = int(cal_result["eventClick"]["event"]["id"])
@@ -690,17 +772,13 @@ elif st.session_state.active_menu == "Kalender":
                 if event_id < len(df_cal_reset):
                     row = df_cal_reset.iloc[event_id]
                     show_agenda_detail(cal_result["eventClick"]["event"]["title"], row)
-            except Exception as e:
-                st.error(f"Gagal memuat detail: {e}")
-        
-        # Legenda Dinamis
+            except Exception as e: st.error(f"Gagal memuat detail: {e}")
+            
         st.markdown("---")
         st.markdown("**Legenda Agenda:**")
         cols = st.columns(4)
         for i, (src, clr) in enumerate(source_colors.items()):
-            with cols[i % 4]:
-                st.markdown(f'<span style="color:{clr};">●</span> {src.replace("2026","")}', unsafe_allow_html=True)
-        
+            with cols[i % 4]: st.markdown(f'<span style="color:{clr};">●</span> {src.replace("2026","")}', unsafe_allow_html=True)
         st.stop()
     else:
         st.warning("Belum ada data jadwal yang valid untuk ditampilkan di kalender.")
