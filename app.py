@@ -276,7 +276,7 @@ if st.session_state.active_menu == "Dashboard":
         <span class="header-tag">Executive Summary</span>
         <h1>⏰ SI-PEKA</h1>
         <p>Ringkasan performa dan agenda kehumasan lintas channel.</p>
-        <a href="https://docs.google.com/spreadsheets/d/1vliisXAUpSXAugCj78j8mc8q2kXX3JQ9T49kD5myCL8/edit?hl=id&gid=2087508271#gid=2087508271" target="_blank" class="drive-link">
+        <a href="https://docs.google.com/spreadsheets/d/1C0-v-ssksVTJgmtEunXqQzVrZEo97ts9Yy7nramEg0k/edit?gid=997884304#gid=997884304" target="_blank" class="drive-link">
             <span>📂</span> Buka Source Data (Google Sheets)
         </a>
     </div>
