@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 📡 Pusat Kendali Kehumasan — Badan Pusat Statiktik Provinsi Sultra
 
 Dashboard modern berbasis Streamlit untuk monitoring dan penjadwalan terintegrasi lintas channel kehumasan BPS Provinsi Sulawesi Tenggara.
@@ -20,3 +21,6 @@ Didesain untuk Streamlit Cloud.
 
 ---
 © 2026 BPS Provinsi Sulawesi Tenggara | Tim humas v1.0
+=======
+# SI-PEKA
+>>>>>>> e311f02f46e4569590ce5cbcf9f5ba121752ef0f
