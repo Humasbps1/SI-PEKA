@@ -214,6 +214,28 @@ def get_all_styles() -> str:
         border: 1px solid rgba(242, 101, 34, 0.3);
     }}
     
+    .drive-link {{
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(242, 101, 34, 0.1) !important;
+        color: #F26522 !important;
+        text-decoration: none !important;
+        padding: 10px 20px;
+        border-radius: 14px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        border: 1px solid rgba(242, 101, 34, 0.2) !important;
+        transition: all 0.3s ease !important;
+        margin-top: 15px;
+    }}
+    .drive-link:hover {{
+        background: #F26522 !important;
+        color: #FFFFFF !important;
+        transform: translateY(-3px);
+        box-shadow: 0 10px 20px rgba(242, 101, 34, 0.2) !important;
+    }}
+    
     /* ── Mobile Responsiveness (Nexus Slate Mobile Fix) ────────── */
     @media (max-width: 768px) {{
         .pg-header {{

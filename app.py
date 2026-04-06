@@ -274,8 +274,11 @@ if st.session_state.active_menu == "Dashboard":
     st.markdown(f"""
     <div class="pg-header">
         <span class="header-tag">Executive Summary</span>
-        <h1>🏠 Dashboard Utama</h1>
+        <h1>⏰ SI-PEKA</h1>
         <p>Ringkasan performa dan agenda kehumasan lintas channel.</p>
+        <a href="https://docs.google.com/spreadsheets/d/1vliisXAUpSXAugCj78j8mc8q2kXX3JQ9T49kD5myCL8/edit?hl=id&gid=2087508271#gid=2087508271" target="_blank" class="drive-link">
+            <span>📂</span> Buka Source Data (Google Sheets)
+        </a>
     </div>
     """, unsafe_allow_html=True)
     
@@ -637,6 +640,9 @@ elif st.session_state.active_menu == "Kalender":
         <span class="header-tag">Operational Schedule</span>
         <h1>📅 Kalender Agenda</h1>
         <p>Visualisasi jadwal terintegrasi lintas channel publikasi.</p>
+        <a href="https://docs.google.com/spreadsheets/d/1vliisXAUpSXAugCj78j8mc8q2kXX3JQ9T49kD5myCL8/edit?hl=id&gid=2087508271#gid=2087508271" target="_blank" class="drive-link">
+            <span>📅</span> Buka Source Data (Google Sheets)
+        </a>
     </div>
     """, unsafe_allow_html=True)
     
