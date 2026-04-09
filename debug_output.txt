@@ -1,0 +1,18 @@
+
+--- SHEET: 📊Promosi Statistik 2026 ---
+Total Rows: 833
+Row 1: ['No', 'Bidang yang Bertugas', 'Nama Konten', 'Bulan', 'Jadwal Posting', 'Jenis Konten', 'Status', 'Progress', 'Content Writer', 'Designer/Editor', 'Konsultan', 'Kameramen', 'Cast/VO', 'Support', 'Link Drive', 'Link Instagram', 'Link Facebook', 'Link Tiktok', 'Interaksi', 'Reach', 'ER', 'Tanggal Screenshoot', 'Link Screenshot Insight', 'Kendala', 'Solusi', 'Status Pengingat']
+Row 2: ['1', 'Hubungan Kelembagaan', 'Kondisi Pendidikan di Sultra \n-> Pengeluaran Konsumsi Penduduk', '1. Januari', '08/01/2026', 'Poster/Infografis', 'Wajib', 'Sudah', 'Hayul/Rohima', 'Syadrie', 'Denny', '', '', '', '0108 Pengeluaran Konsumsi Penduduk', 'https://www.instagram.com/p/DTP5jkJkQg0/?img_index=4&igsh=MXExaGg1OTF3MjhoZw==', 'https://web.facebook.com/share/v/1X2PQnJUu6/', 'https://vt.tiktok.com/ZS5Q7V1bF/', '110', '2602', '4,23', '15 Januari 2026', '20260108 Tim HK - Pengeluaran Konsumsi Penduduk', '', '', '']
+------------------------------
+
+--- SHEET: 🖼️Konten Medsos ---
+Total Rows: 125
+Row 1: ['No', 'Nama Konten', 'Jenis', 'Bulan', 'Jadwal Tayang', 'Status', 'Rubrik', 'Writer', 'Designer/Editor', 'Kameramen', 'Cast/VO', 'Support', 'Petugas Posting', 'Link Drive', 'Link Instagram', 'Link Facebook', 'Link Tiktok', 'Link Youtube', 'Kendala', 'Solusi', 'Interaksi', 'Reach', 'ER', 'Tanggal Screenshoot', 'Link Screenshot Insight', 'Status Pengingat']
+Row 2: ['1', 'Sosialisasi Rilis BRS', 'Reels', '1. Januari', '05/01/2026 0:00:00', 'Wajib', 'BRS', 'Harli', 'Wildan', '', '', '', 'Wildan', '01 Januari_05 Rilis BRS Distribusi', 'https://www.instagram.com/reel/DTH0HQtj92e/?igsh=MTB2dGZza3Jmc2ducw==', 'https://www.facebook.com/share/r/1BprMYEnif/', 'https://vt.tiktok.com/ZS5PAafE7/', 'https://youtube.com/live/njIblkdeQF4?feature=share', '', '', '30', '795', '3,77', '6/2/2026', '05012026 Sosialisasi Rilis.jpg', '']
+------------------------------
+
+--- SHEET: 📣Press Release ---
+Total Rows: 19
+Row 1: ['No', 'Tema Rilis', 'Link Rilis & Sosialisasi', 'Link HMM Rilis', 'Bulan', 'Jadwal Rilis', 'Progress', 'Operator OBS', 'Video Rilis', 'HMM 1', 'HMM 2', 'HMM 3', 'Protokol dan Dokumentasi', 'Tim IPD', 'Operator SM', 'Kendala', 'Solusi', 'Status Pengingat']
+Row 2: ['1', 'Inflasi, NTP, Pariwisata, Transportasi, Ekspor Impor', '01 Januari_05 Rilis BRS Distribusi', '01_Januari 05', '1. Januari', '05/01/2026', 'Sudah', 'Denny', 'Wildan', 'Riri', 'Syifa', 'Harli', 'Maudy & Haris', '', 'Agri & Adiman', '', '', '']
+------------------------------

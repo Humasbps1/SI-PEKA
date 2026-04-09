@@ -1,0 +1,3 @@
+ALL: ['Customize your calendar', '🔥Welcome 2026', '📣Press Release', '📊Promosi Statistik 2026', '✨Hari Penting', '🖼️Konten Medsos', 'Sosialisasi Publikasi 📢', '🕵🏻\u200d♂️Keprotokolan', '📸 Peliputan', '🎙️Sosialisasi Kegiatan', '📝 Media Massa (non rilis)', '🤝🏻 Kelembagaan', '📚 Pengembangan Kompetensi', 'Kontak', 'January', 'February', 'March', 'April', 'Year']
+LOADED: ['Customize your calendar', '🔥Welcome 2026', '📣Press Release', '📊Promosi Statistik 2026', '✨Hari Penting', '🖼️Konten Medsos', 'Sosialisasi Publikasi 📢', '🕵🏻\u200d♂️Keprotokolan', '📸 Peliputan', '🎙️Sosialisasi Kegiatan', '📝 Media Massa (non rilis)', '🤝🏻 Kelembagaan', '📚 Pengembangan Kompetensi', 'Kontak']
+SKIPPED: ['January', 'February', 'March', 'April', 'Year']
