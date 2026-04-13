@@ -282,7 +282,7 @@ if st.session_state.active_menu == "Dashboard":
     st.markdown(f"""
     <div class="pg-header">
         <span class="header-tag">Executive Summary</span>
-        <h1>⏰ SIPEKA</h1>
+        <h1>⏰ SI-PEKA</h1>
         <p>Ringkasan performa dan agenda kehumasan lintas channel.</p>
         <a href="https://docs.google.com/spreadsheets/d/1C0-v-ssksVTJgmtEunXqQzVrZEo97ts9Yy7nramEg0k/edit?gid=582674217#gid=582674217" target="_blank" class="drive-link">
             <span>📂</span> Buka Source Data (Google Sheets)
