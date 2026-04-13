@@ -27,6 +27,25 @@ st.set_page_config(
 )
 
 # ===============================
+# GLOBAL CHANNEL CONFIG 📡
+# ===============================
+# Daftar channel resmi yang akan ditampilkan di dashboard & kalender
+CHANNEL_CONFIG = {
+    "🖼️Konten Medsos": "#009ade",           # Professional Blue
+    "✨Hari Penting": "#ffb599",             # Cream Peach
+    "📊Promosi Statistik 2026": "#f26522",   # Primary Orange
+    "📸 Peliputan": "#f26522",               # Same as Promosi (Field works)
+    "🕵🏻‍♂️Keprotokolan": "#e4e1ed",             # Soft Lavender/White
+    "📣Press Release": "#8cceff",            # Sky Blue
+    "Sosialisasi Publikasi 📢": "#581e03",   # Chocolate Brown
+    "🎙️Sosialisasi Kegiatan": "#8cceff",     # Sky Blue
+    "🤝🏻 Kelembagaan": "#009ade",             # Professional Blue
+    "📝 Media Massa (non rilis)": "#ffb599", # Cream Peach
+    "📚 Pengembangan Kompetensi": "#581e03"  # Chocolate Brown
+}
+OFFICIAL_CHANNELS = list(CHANNEL_CONFIG.keys())
+
+# ===============================
 # PREMIUM UI STYLING (v3.0)
 # ===============================
 st.markdown(get_main_css(), unsafe_allow_html=True)
@@ -156,20 +175,10 @@ def load_single_sheet_data(sheet_name):
 
 @st.cache_data(ttl=600)
 def load_all_dashboard_data():
-    """Memuat SEMUA sheet dari workbook secara total untuk menghindari data terlewat."""
+    """Memuat data HANYA dari channel resmi yang telah ditentukan untuk akurasi dashboard."""
     try:
         sh = get_gspread_session()
         if not sh: return pd.DataFrame()
-        
-        # Daftar nama sheet yang harus diabaikan (case-insensitive)
-        skip_sheets = [
-            'pilih', 'config', 'referensi', 'hidden', 'year', 'tahun',
-            'januari', 'februari', 'maret', 'april', 'mei', 'juni',
-            'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
-            'january', 'february', 'march', 'april', 'may', 'june',
-            'july', 'august', 'september', 'october', 'november', 'december',
-            'welcome 2026', 'welcome'
-        ]
         
         # Ambil seluruh daftar nama sheet
         all_worksheets = [ws.title for ws in sh.worksheets()]
@@ -177,15 +186,22 @@ def load_all_dashboard_data():
         all_dfs = []
         loaded_sheets = []
         
+        # Buat mapping untuk normalisasi (case-insensitive + strip)
+        channel_mapping = {c.strip().lower(): c for c in OFFICIAL_CHANNELS}
+        
         for s in all_worksheets:
-            # Skip sheet sistem atau bulan/tahun
-            if s.lower() in skip_sheets: continue
+            # Pencocokan fleksibel (strip, lowercase, abaikan variasi minor)
+            s_clean = s.strip().lower()
+            if s_clean not in channel_mapping:
+                continue
             
+            target_name = channel_mapping[s_clean]
             tdf = load_single_sheet_data(s)
-            if not tdf.empty and ('dt_ref' in tdf.columns or len(tdf.columns) > 3):
-                tdf['Sumber'] = s
+            
+            if not tdf.empty:
+                tdf['Sumber'] = target_name # Gunakan nama resmi dari config
                 all_dfs.append(tdf)
-                loaded_sheets.append(s)
+                loaded_sheets.append(target_name)
         
         # Simpan daftar sheet yang berhasil dimuat di session state untuk UI
         st.session_state.loaded_sheets_info = loaded_sheets
@@ -193,7 +209,7 @@ def load_all_dashboard_data():
         if not all_dfs: return pd.DataFrame()
         final_df = pd.concat(all_dfs, ignore_index=True)
         
-        # Final Cleaning: Pastikan tidak ada duplikasi baris kosong yang nyelip
+        # Final Cleaning
         test_cols = [c for c in final_df.columns if c not in ['dt_ref', 'Sumber', 'Unnamed: 0']]
         final_df = final_df.replace('', pd.NA).dropna(subset=test_cols, how='all').fillna('')
         
@@ -338,38 +354,35 @@ if st.session_state.active_menu == "Dashboard":
                         st.session_state.fv_source = not st.session_state.fv_source
                         st.rerun()
                 
+                # Data kontribusi channel
                 source_counts = df_all['Sumber'].value_counts().reset_index()
                 source_counts.columns = ['Sheet', 'Jumlah']
                 
-                # Nexus Slate Chart Color Palette
-                color_map = {
-                    "📊Promosi Statistik 2026": "#f26522", # Primary Orange
-                    "✨Hari Penting": "#ffb599",          # Light Orange
-                    "📣Press Release": "#8cceff",         # Tertiary Blue
-                    "🖼️Konten Medsos": "#009ade",         # Professional Blue
-                    "Sosialisasi Publikasi 📢": "#581e03", # Dark Brown/Orange
-                    "🕵🏻‍♂️Keprotokolan": "#e4e1ed",          # Neutral
-                    "📸 Peliputan": "#f26522",
-                    "📝 Media Massa (non rilis)": "#ffb599",
-                    "🎙️Sosialisasi Kegiatan": "#8cceff",
-                    "🤝🏻 Kelembagaan": "#009ade",
-                    "📚 Pengembangan Kompetensi": "#581e03"
-                }
+                # Pastikan SEMUA 11 channel muncul di chart, meskipun jumlahnya 0
+                all_channels_df = pd.DataFrame({'Sheet': OFFICIAL_CHANNELS})
+                source_counts = pd.merge(all_channels_df, source_counts, on='Sheet', how='left').fillna(0)
                 
+                # Nexus Slate Chart Color Palette - Gunakan Global Config
                 fig = px.bar(source_counts, x='Sheet', y='Jumlah', 
                              color='Sheet', 
-                             color_discrete_map=color_map,
+                             color_discrete_map=CHANNEL_CONFIG,
                              template='plotly_dark',
                              text='Jumlah')
                 
-                fig.update_traces(textposition='outside')
+                fig.update_traces(
+                    textposition='outside',
+                    marker_line_width=0,
+                    hovertemplate="<b>%{x}</b><br>Jumlah Agenda: %{y}<extra></extra>"
+                )
+                
                 fig.update_layout(showlegend=False, 
                                   plot_bgcolor='rgba(0,0,0,0)', 
                                   paper_bgcolor='rgba(0,0,0,0)',
                                   height=550 if expanded else 480,
                                   margin=dict(t=50, b=10, l=10, r=10),
-                                  xaxis=dict(title=""),
-                                  font=dict(color='#888aaa'))
+                                  xaxis=dict(title="", categoryorder='total descending', tickangle=-15),
+                                  yaxis=dict(title="Jumlah Agenda", gridcolor='rgba(255,255,255,0.05)'),
+                                  font=dict(color='#888aaa', size=11))
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, theme=None)
 
         def render_trend_chart(expanded=False):
@@ -658,19 +671,8 @@ elif st.session_state.active_menu == "Kalender":
         df_cal = df_all.dropna(subset=['dt_ref']).copy()
         
         events = []
-        source_colors = {
-            "📊Promosi Statistik 2026": "#36A2EB",
-            "✨Hari Penting": "#FFCE56",
-            "📣Press Release": "#F26522",
-            "🖼️Konten Medsos": "#4BC0C0",
-            "Sosialisasi Publikasi 📢": "#9966FF",
-            "🕵🏻‍♂️Keprotokolan": "#C9CBCF",
-            "📸 Peliputan": "#FF9F40",
-            "📝 Media Massa (non rilis)": "#FF6384",
-            "🎙️Sosialisasi Kegiatan": "#36A2EB",
-            "🤝🏻 Kelembagaan": "#4BC0C0",
-            "📚 Pengembangan Kompetensi": "#9966FF"
-        }
+        # Gunakan warna dari Global Channel Config agar sinkron
+        source_colors = CHANNEL_CONFIG
         
         for idx, (_, row) in enumerate(df_cal.iterrows()):
             # --- SAME REFINED RADAR FOR CALENDAR ---
